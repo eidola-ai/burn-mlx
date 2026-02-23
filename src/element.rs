@@ -160,30 +160,66 @@ pub trait FloatMlxElement: MlxElement + Float + FromPrimitive {
 }
 
 impl FloatMlxElement for f32 {
-    fn scalar_array(value: Self) -> Array { Array::from_f32(value) }
-    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array { Array::from_slice(data, shape) }
-    fn zeros_array(shape: &[i32]) -> Array { Array::zeros::<f32>(shape).expect("zeros") }
-    fn ones_array(shape: &[i32]) -> Array { Array::ones::<f32>(shape).expect("ones") }
-    fn array_to_vec(array: &Array) -> Vec<Self> { array.as_slice::<f32>().to_vec() }
-    fn cast_array(array: &Array) -> Array { array.as_type::<f32>().expect("cast") }
+    fn scalar_array(value: Self) -> Array {
+        Array::from_f32(value)
+    }
+    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array {
+        Array::from_slice(data, shape)
+    }
+    fn zeros_array(shape: &[i32]) -> Array {
+        Array::zeros::<f32>(shape).expect("zeros")
+    }
+    fn ones_array(shape: &[i32]) -> Array {
+        Array::ones::<f32>(shape).expect("ones")
+    }
+    fn array_to_vec(array: &Array) -> Vec<Self> {
+        array.as_slice::<f32>().to_vec()
+    }
+    fn cast_array(array: &Array) -> Array {
+        array.as_type::<f32>().expect("cast")
+    }
 }
 
 impl FloatMlxElement for f16 {
-    fn scalar_array(value: Self) -> Array { Array::from_slice(&[value], &[1]) }
-    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array { Array::from_slice(data, shape) }
-    fn zeros_array(shape: &[i32]) -> Array { Array::zeros::<f16>(shape).expect("zeros") }
-    fn ones_array(shape: &[i32]) -> Array { Array::ones::<f16>(shape).expect("ones") }
-    fn array_to_vec(array: &Array) -> Vec<Self> { array.as_slice::<f16>().to_vec() }
-    fn cast_array(array: &Array) -> Array { array.as_type::<f16>().expect("cast") }
+    fn scalar_array(value: Self) -> Array {
+        Array::from_slice(&[value], &[1])
+    }
+    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array {
+        Array::from_slice(data, shape)
+    }
+    fn zeros_array(shape: &[i32]) -> Array {
+        Array::zeros::<f16>(shape).expect("zeros")
+    }
+    fn ones_array(shape: &[i32]) -> Array {
+        Array::ones::<f16>(shape).expect("ones")
+    }
+    fn array_to_vec(array: &Array) -> Vec<Self> {
+        array.as_slice::<f16>().to_vec()
+    }
+    fn cast_array(array: &Array) -> Array {
+        array.as_type::<f16>().expect("cast")
+    }
 }
 
 impl FloatMlxElement for bf16 {
-    fn scalar_array(value: Self) -> Array { Array::from_slice(&[value], &[1]) }
-    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array { Array::from_slice(data, shape) }
-    fn zeros_array(shape: &[i32]) -> Array { Array::zeros::<bf16>(shape).expect("zeros") }
-    fn ones_array(shape: &[i32]) -> Array { Array::ones::<bf16>(shape).expect("ones") }
-    fn array_to_vec(array: &Array) -> Vec<Self> { array.as_slice::<bf16>().to_vec() }
-    fn cast_array(array: &Array) -> Array { array.as_type::<bf16>().expect("cast") }
+    fn scalar_array(value: Self) -> Array {
+        Array::from_slice(&[value], &[1])
+    }
+    fn array_from_slice(data: &[Self], shape: &[i32]) -> Array {
+        Array::from_slice(data, shape)
+    }
+    fn zeros_array(shape: &[i32]) -> Array {
+        Array::zeros::<bf16>(shape).expect("zeros")
+    }
+    fn ones_array(shape: &[i32]) -> Array {
+        Array::ones::<bf16>(shape).expect("ones")
+    }
+    fn array_to_vec(array: &Array) -> Vec<Self> {
+        array.as_slice::<bf16>().to_vec()
+    }
+    fn cast_array(array: &Array) -> Array {
+        array.as_type::<bf16>().expect("cast")
+    }
 }
 
 impl FloatMlxElement for f64 {
@@ -209,7 +245,9 @@ impl FloatMlxElement for f64 {
         let arr = array.as_type::<f32>().expect("cast to f32");
         arr.as_slice::<f32>().iter().map(|&v| v as f64).collect()
     }
-    fn cast_array(array: &Array) -> Array { array.as_type::<f64>().expect("cast") }
+    fn cast_array(array: &Array) -> Array {
+        array.as_type::<f64>().expect("cast")
+    }
 }
 
 #[cfg(test)]

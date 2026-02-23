@@ -1,11 +1,11 @@
 //! Module operations for MLX backend (neural network primitives).
 
 use burn_tensor::ops::{
-    ConvOptions, ConvTransposeOptions, DeformConv2dBackward, DeformConvOptions,
-    InterpolateOptions, MaxPool1dWithIndices, MaxPool2dBackward, MaxPool2dWithIndices, ModuleOps,
+    ConvOptions, ConvTransposeOptions, DeformConv2dBackward, DeformConvOptions, InterpolateOptions,
+    MaxPool1dWithIndices, MaxPool2dBackward, MaxPool2dWithIndices, ModuleOps,
 };
-use mlx_rs::Array;
 use mlx_rs::ops::indexing::take_axis;
+use mlx_rs::Array;
 
 use crate::backend::{Mlx, MlxTensorPrimitive};
 use crate::element::FloatMlxElement;
@@ -15,12 +15,7 @@ use crate::element::FloatMlxElement;
 ///
 /// Input shape for 2D: [N, H, W, C] (NHWC format - MLX native)
 /// Returns: pooled output with shape [N, out_H, out_W, C]
-fn pool2d_strided<F>(
-    x: &Array,
-    kernel_size: [usize; 2],
-    stride: [usize; 2],
-    pooling_op: F,
-) -> Array
+fn pool2d_strided<F>(x: &Array, kernel_size: [usize; 2], stride: [usize; 2], pooling_op: F) -> Array
 where
     F: Fn(&Array, &[i32]) -> Result<Array, mlx_rs::error::Exception>,
 {
@@ -54,17 +49,17 @@ where
 
     // Final strides: [N_stride, H_stride*sh, W_stride*sw, H_stride, W_stride, C_stride]
     let final_strides = vec![
-        orig_strides[0],           // N stride
-        orig_strides[1] * sh,      // out_H stride (moves by stride[0] in H dimension)
-        orig_strides[2] * sw,      // out_W stride (moves by stride[1] in W dimension)
-        orig_strides[1],           // kH stride (moves by 1 in H dimension)
-        orig_strides[2],           // kW stride (moves by 1 in W dimension)
-        orig_strides[3],           // C stride
+        orig_strides[0],      // N stride
+        orig_strides[1] * sh, // out_H stride (moves by stride[0] in H dimension)
+        orig_strides[2] * sw, // out_W stride (moves by stride[1] in W dimension)
+        orig_strides[1],      // kH stride (moves by 1 in H dimension)
+        orig_strides[2],      // kW stride (moves by 1 in W dimension)
+        orig_strides[3],      // C stride
     ];
 
     // Create strided view
-    let strided = mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None)
-        .expect("as_strided");
+    let strided =
+        mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None).expect("as_strided");
 
     // Apply pooling operation on kernel dimensions (axes -3 and -2, i.e., 3 and 4)
     // This reduces [N, out_H, out_W, kH, kW, C] -> [N, out_H, out_W, C]
@@ -75,12 +70,7 @@ where
 /// Helper function for 1D pooling using as_strided approach.
 /// Input shape: [N, L, C] (NLC format - MLX native)
 /// Returns: pooled output with shape [N, out_L, C]
-fn pool1d_strided<F>(
-    x: &Array,
-    kernel_size: usize,
-    stride: usize,
-    pooling_op: F,
-) -> Array
+fn pool1d_strided<F>(x: &Array, kernel_size: usize, stride: usize, pooling_op: F) -> Array
 where
     F: Fn(&Array, &[i32]) -> Result<Array, mlx_rs::error::Exception>,
 {
@@ -109,15 +99,15 @@ where
 
     // Final strides: [N_stride, L_stride*s, L_stride, C_stride]
     let final_strides = vec![
-        orig_strides[0],           // N stride
-        orig_strides[1] * s,       // out_L stride
-        orig_strides[1],           // K stride
-        orig_strides[2],           // C stride
+        orig_strides[0],     // N stride
+        orig_strides[1] * s, // out_L stride
+        orig_strides[1],     // K stride
+        orig_strides[2],     // C stride
     ];
 
     // Create strided view
-    let strided = mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None)
-        .expect("as_strided");
+    let strided =
+        mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None).expect("as_strided");
 
     // Apply pooling operation on kernel dimension (axis -2, i.e., 2)
     let axes = [-2];
@@ -171,12 +161,14 @@ fn max_pool2d_with_indices_impl(
     ];
 
     // Create strided view: [N, out_H, out_W, kH, kW, C]
-    let strided = mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None)
-        .expect("as_strided");
+    let strided =
+        mlx_rs::ops::as_strided(x, &final_shape[..], &final_strides[..], None).expect("as_strided");
 
     // Flatten kernel dimensions: [N, out_H, out_W, kH*kW, C]
     let flat_kernel = kh * kw;
-    let reshaped = strided.reshape(&[n, out_h, out_w, flat_kernel, c]).expect("reshape");
+    let reshaped = strided
+        .reshape(&[n, out_h, out_w, flat_kernel, c])
+        .expect("reshape");
 
     // Get max values: reduce on axis 3 (the flattened kernel axis)
     let output = reshaped.max_axis(3, None).expect("max_axis");
@@ -195,19 +187,23 @@ fn max_pool2d_with_indices_impl(
     // Create index arrays for n, oh, ow, c dimensions
     let n_range: Vec<i32> = (0..n_size as i32).collect();
     let n_idx = Array::from_slice(&n_range, &[n_size as i32])
-        .reshape(&[n, 1, 1, 1]).expect("reshape");
+        .reshape(&[n, 1, 1, 1])
+        .expect("reshape");
 
     let oh_range: Vec<i32> = (0..out_h_size as i32).collect();
     let oh_idx = Array::from_slice(&oh_range, &[out_h_size as i32])
-        .reshape(&[1, out_h, 1, 1]).expect("reshape");
+        .reshape(&[1, out_h, 1, 1])
+        .expect("reshape");
 
     let ow_range: Vec<i32> = (0..out_w_size as i32).collect();
     let ow_idx = Array::from_slice(&ow_range, &[out_w_size as i32])
-        .reshape(&[1, 1, out_w, 1]).expect("reshape");
+        .reshape(&[1, 1, out_w, 1])
+        .expect("reshape");
 
     let c_range: Vec<i32> = (0..c_size as i32).collect();
     let c_idx = Array::from_slice(&c_range, &[c_size as i32])
-        .reshape(&[1, 1, 1, c]).expect("reshape");
+        .reshape(&[1, 1, 1, c])
+        .expect("reshape");
 
     // Compute local_h and local_w from local_indices
     let kw_arr = Array::from_int(kw);
@@ -220,13 +216,15 @@ fn max_pool2d_with_indices_impl(
 
     let actual_h = mlx_rs::ops::add(
         &mlx_rs::ops::multiply(&oh_idx, &sh_arr).expect("mul"),
-        &local_h
-    ).expect("add");
+        &local_h,
+    )
+    .expect("add");
 
     let actual_w = mlx_rs::ops::add(
         &mlx_rs::ops::multiply(&ow_idx, &sw_arr).expect("mul"),
-        &local_w
-    ).expect("add");
+        &local_w,
+    )
+    .expect("add");
 
     // Compute flat index: n * (H * W * C) + h * (W * C) + w * C + c
     let hwc = Array::from_int((h_size * w_size * c_size) as i32);
@@ -237,12 +235,15 @@ fn max_pool2d_with_indices_impl(
         &mlx_rs::ops::add(
             &mlx_rs::ops::add(
                 &mlx_rs::ops::multiply(&n_idx, &hwc).expect("mul"),
-                &mlx_rs::ops::multiply(&actual_h, &wc).expect("mul")
-            ).expect("add"),
-            &mlx_rs::ops::multiply(&actual_w, &c_stride).expect("mul")
-        ).expect("add"),
-        &c_idx
-    ).expect("add");
+                &mlx_rs::ops::multiply(&actual_h, &wc).expect("mul"),
+            )
+            .expect("add"),
+            &mlx_rs::ops::multiply(&actual_w, &c_stride).expect("mul"),
+        )
+        .expect("add"),
+        &c_idx,
+    )
+    .expect("add");
 
     (output, flat_indices)
 }
@@ -270,7 +271,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
             options.padding[0] as i32,
             options.dilation[0] as i32,
             options.groups as i32,
-        ).expect("conv1d");
+        )
+        .expect("conv1d");
 
         // Transpose output back from [N, L_out, C_out] to [N, C_out, L_out]
         let mut output = mlx_rs::ops::transpose_axes(&result, &[0, 2, 1]).expect("transpose");
@@ -278,7 +280,10 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         // Add bias if provided
         if let Some(b) = bias {
             let b_shape = b.shape();
-            let b_reshaped = b.array.reshape(&[1, b_shape[0] as i32, 1]).expect("reshape bias");
+            let b_reshaped = b
+                .array
+                .reshape(&[1, b_shape[0] as i32, 1])
+                .expect("reshape bias");
             output = mlx_rs::ops::add(&output, &b_reshaped).expect("add bias");
         }
 
@@ -304,14 +309,9 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let padding = (options.padding[0] as i32, options.padding[1] as i32);
         let dilation = (options.dilation[0] as i32, options.dilation[1] as i32);
 
-        let result = mlx_rs::ops::conv2d(
-            &x_t,
-            &w_t,
-            stride,
-            padding,
-            dilation,
-            options.groups as i32,
-        ).expect("conv2d");
+        let result =
+            mlx_rs::ops::conv2d(&x_t, &w_t, stride, padding, dilation, options.groups as i32)
+                .expect("conv2d");
 
         // Transpose output back from [N, H_out, W_out, C_out] to [N, C_out, H_out, W_out]
         let mut output = mlx_rs::ops::transpose_axes(&result, &[0, 3, 1, 2]).expect("transpose");
@@ -319,7 +319,10 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         // Add bias if provided
         if let Some(b) = bias {
             let b_shape = b.shape();
-            let b_reshaped = b.array.reshape(&[1, b_shape[0] as i32, 1, 1]).expect("reshape bias");
+            let b_reshaped = b
+                .array
+                .reshape(&[1, b_shape[0] as i32, 1, 1])
+                .expect("reshape bias");
             output = mlx_rs::ops::add(&output, &b_reshaped).expect("add bias");
         }
 
@@ -409,12 +412,7 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
 
         let x_padded = if padding > 0 {
             let pad = padding as i32;
-            mlx_rs::ops::pad(
-                &x_nhwc,
-                &[(0, 0), (pad, pad), (0, 0)],
-                None,
-                None,
-            ).expect("pad")
+            mlx_rs::ops::pad(&x_nhwc, &[(0, 0), (pad, pad), (0, 0)], None, None).expect("pad")
         } else {
             x_nhwc
         };
@@ -446,7 +444,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                 &[(0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)],
                 None,
                 None,
-            ).expect("pad")
+            )
+            .expect("pad")
         } else {
             x_nhwc
         };
@@ -494,12 +493,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let scale = F::f64_scalar_array(1.0 / pool_size as f64);
         let grad_scaled = mlx_rs::ops::multiply(&grad_nhwc, &scale).expect("multiply");
 
-        let grad_input_padded = F::zeros_array(&[
-            n as i32,
-            h_padded as i32,
-            w_padded as i32,
-            c as i32,
-        ]);
+        let grad_input_padded =
+            F::zeros_array(&[n as i32, h_padded as i32, w_padded as i32, c as i32]);
 
         let mut all_indices: Vec<i32> = Vec::with_capacity(n * out_h * out_w * kh * kw * c);
         let mut update_indices: Vec<usize> = Vec::with_capacity(n * out_h * out_w * kh * kw * c);
@@ -519,10 +514,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                                     + wi * c
                                     + ci) as i32;
                                 all_indices.push(flat_idx);
-                                let grad_idx = ni * out_h * out_w * c
-                                    + ohi * out_w * c
-                                    + owi * c
-                                    + ci;
+                                let grad_idx =
+                                    ni * out_h * out_w * c + ohi * out_w * c + owi * c + ci;
                                 update_indices.push(grad_idx);
                             }
                         }
@@ -541,19 +534,13 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let grad_input_flat = grad_input_padded.flatten(None, None).expect("flatten");
         let indices_arr = Array::from_slice(&all_indices, &[all_indices.len() as i32]);
 
-        let result_flat = mlx_rs::ops::scatter_add(
-            &grad_input_flat,
-            &[&indices_arr],
-            &updates,
-            &[0],
-        ).expect("scatter_add");
+        let result_flat =
+            mlx_rs::ops::scatter_add(&grad_input_flat, &[&indices_arr], &updates, &[0])
+                .expect("scatter_add");
 
-        let result_nhwc = result_flat.reshape(&[
-            n as i32,
-            h_padded as i32,
-            w_padded as i32,
-            c as i32,
-        ]).expect("reshape");
+        let result_nhwc = result_flat
+            .reshape(&[n as i32, h_padded as i32, w_padded as i32, c as i32])
+            .expect("reshape");
 
         let result_unpadded = if pad_h > 0 || pad_w > 0 {
             mlx_rs::ops::slice(
@@ -561,12 +548,14 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                 &[0, pad_h as i32, pad_w as i32, 0],
                 &[n as i32, (pad_h + h) as i32, (pad_w + w) as i32, c as i32],
                 None,
-            ).expect("slice")
+            )
+            .expect("slice")
         } else {
             result_nhwc
         };
 
-        let output = mlx_rs::ops::transpose_axes(&result_unpadded, &[0, 3, 1, 2]).expect("transpose");
+        let output =
+            mlx_rs::ops::transpose_axes(&result_unpadded, &[0, 3, 1, 2]).expect("transpose");
         MlxTensorPrimitive::new(output)
     }
 
@@ -583,12 +572,7 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let x_padded = if padding > 0 {
             let pad = padding as i32;
             let neg_inf = F::scalar_array(F::neg_infinity());
-            mlx_rs::ops::pad(
-                &x_nlc,
-                &[(0, 0), (pad, pad), (0, 0)],
-                neg_inf,
-                None,
-            ).expect("pad")
+            mlx_rs::ops::pad(&x_nlc, &[(0, 0), (pad, pad), (0, 0)], neg_inf, None).expect("pad")
         } else {
             x_nlc
         };
@@ -620,7 +604,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                 &[(0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)],
                 neg_inf,
                 None,
-            ).expect("pad")
+            )
+            .expect("pad")
         } else {
             x_nhwc
         };
@@ -643,8 +628,15 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
     ) -> MaxPool1dWithIndices<Mlx<F>> {
         let output = Self::max_pool1d(x, kernel_size, stride, padding, dilation, false);
         let indices = MlxTensorPrimitive::new(
-            Array::zeros::<i32>(&output.array.shape().iter().map(|&s| s as i32).collect::<Vec<_>>())
-                .expect("zeros")
+            Array::zeros::<i32>(
+                &output
+                    .array
+                    .shape()
+                    .iter()
+                    .map(|&s| s as i32)
+                    .collect::<Vec<_>>(),
+            )
+            .expect("zeros"),
         );
         MaxPool1dWithIndices::new(output, indices)
     }
@@ -668,12 +660,14 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                 &[(0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)],
                 neg_inf,
                 None,
-            ).expect("pad")
+            )
+            .expect("pad")
         } else {
             x_nhwc
         };
 
-        let (output_nhwc, indices_nhwc) = max_pool2d_with_indices_impl(&x_padded, kernel_size, stride);
+        let (output_nhwc, indices_nhwc) =
+            max_pool2d_with_indices_impl(&x_padded, kernel_size, stride);
 
         let output = mlx_rs::ops::transpose_axes(&output_nhwc, &[0, 3, 1, 2]).expect("transpose");
         let indices = mlx_rs::ops::transpose_axes(&indices_nhwc, &[0, 3, 1, 2]).expect("transpose");
@@ -709,25 +703,21 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let total_size = n * h_padded * w_padded * c;
         let grad_input_flat = F::zeros_array(&[total_size as i32]);
 
-        let grad_nhwc = mlx_rs::ops::transpose_axes(&output_grad.array, &[0, 2, 3, 1]).expect("transpose");
-        let indices_nhwc = mlx_rs::ops::transpose_axes(&indices.array, &[0, 2, 3, 1]).expect("transpose");
+        let grad_nhwc =
+            mlx_rs::ops::transpose_axes(&output_grad.array, &[0, 2, 3, 1]).expect("transpose");
+        let indices_nhwc =
+            mlx_rs::ops::transpose_axes(&indices.array, &[0, 2, 3, 1]).expect("transpose");
 
         let grad_flat = grad_nhwc.flatten(None, None).expect("flatten");
         let indices_flat = indices_nhwc.flatten(None, None).expect("flatten");
 
-        let result_flat = mlx_rs::ops::scatter_add(
-            &grad_input_flat,
-            &[&indices_flat],
-            &grad_flat,
-            &[0],
-        ).expect("scatter_add");
+        let result_flat =
+            mlx_rs::ops::scatter_add(&grad_input_flat, &[&indices_flat], &grad_flat, &[0])
+                .expect("scatter_add");
 
-        let result_nhwc = result_flat.reshape(&[
-            n as i32,
-            h_padded as i32,
-            w_padded as i32,
-            c as i32,
-        ]).expect("reshape");
+        let result_nhwc = result_flat
+            .reshape(&[n as i32, h_padded as i32, w_padded as i32, c as i32])
+            .expect("reshape");
 
         let result_unpadded = if pad_h > 0 || pad_w > 0 {
             mlx_rs::ops::slice(
@@ -735,12 +725,14 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
                 &[0, pad_h as i32, pad_w as i32, 0],
                 &[n as i32, (pad_h + h) as i32, (pad_w + w) as i32, c as i32],
                 None,
-            ).expect("slice")
+            )
+            .expect("slice")
         } else {
             result_nhwc
         };
 
-        let output = mlx_rs::ops::transpose_axes(&result_unpadded, &[0, 3, 1, 2]).expect("transpose");
+        let output =
+            mlx_rs::ops::transpose_axes(&result_unpadded, &[0, 3, 1, 2]).expect("transpose");
         MaxPool2dBackward::new(MlxTensorPrimitive::new(output))
     }
 
@@ -761,7 +753,14 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         let kernel_h = input_h - (output_size[0] - 1) * stride_h;
         let kernel_w = input_w - (output_size[1] - 1) * stride_w;
 
-        Self::avg_pool2d(x, [kernel_h, kernel_w], [stride_h, stride_w], [0, 0], true, false)
+        Self::avg_pool2d(
+            x,
+            [kernel_h, kernel_w],
+            [stride_h, stride_w],
+            [0, 0],
+            true,
+            false,
+        )
     }
 
     fn adaptive_avg_pool2d_backward(
@@ -792,12 +791,8 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(output)
     }
 
-    fn embedding(
-        weights: MlxTensorPrimitive,
-        indices: MlxTensorPrimitive,
-    ) -> MlxTensorPrimitive {
-        let array = take_axis(&weights.array, &indices.array, 0)
-            .expect("embedding");
+    fn embedding(weights: MlxTensorPrimitive, indices: MlxTensorPrimitive) -> MlxTensorPrimitive {
+        let array = take_axis(&weights.array, &indices.array, 0).expect("embedding");
         MlxTensorPrimitive::new(array)
     }
 

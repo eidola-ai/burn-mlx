@@ -1,8 +1,8 @@
 //! MLX Backend implementation for Burn.
 
 use burn_tensor::backend::{Backend, ExecutionError};
-use burn_tensor::{DType, TensorMetadata};
 use burn_tensor::quantization::QuantScheme;
+use burn_tensor::{DType, TensorMetadata};
 use mlx_rs::Array;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -133,7 +133,9 @@ impl<F: FloatMlxElement> std::fmt::Debug for Mlx<F> {
 
 impl<F: FloatMlxElement> Default for Mlx<F> {
     fn default() -> Self {
-        Self { _phantom: PhantomData }
+        Self {
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -172,7 +174,13 @@ impl<F: FloatMlxElement> Backend for Mlx<F> {
     fn supports_dtype(_device: &Self::Device, dtype: DType) -> bool {
         matches!(
             dtype,
-            DType::F32 | DType::F64 | DType::F16 | DType::BF16 | DType::I32 | DType::I64 | DType::Bool
+            DType::F32
+                | DType::F64
+                | DType::F16
+                | DType::BF16
+                | DType::I32
+                | DType::I64
+                | DType::Bool
         )
     }
 

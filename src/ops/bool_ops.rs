@@ -1,8 +1,8 @@
 //! Boolean tensor operations for MLX backend.
 
 use burn_tensor::{backend::ExecutionError, ops::BoolTensorOps, Shape, Slice, TensorData};
+use mlx_rs::ops::indexing::{take_along_axis, take_axis};
 use mlx_rs::Array;
-use mlx_rs::ops::indexing::{take_axis, take_along_axis};
 
 use crate::backend::{Mlx, MlxTensorPrimitive};
 use crate::device::MlxDevice;
@@ -67,16 +67,24 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
 
     fn bool_slice(tensor: MlxTensorPrimitive, slices: &[Slice]) -> MlxTensorPrimitive {
         let shape = tensor.shape().to_vec();
-        let starts: Vec<i32> = slices.iter().enumerate().map(|(i, s)| {
-            let range = s.to_range(*shape.get(i).unwrap_or(&0));
-            range.start as i32
-        }).collect();
-        let stops: Vec<i32> = slices.iter().enumerate().map(|(i, s)| {
-            let range = s.to_range(*shape.get(i).unwrap_or(&0));
-            range.end as i32
-        }).collect();
-        let array = mlx_rs::ops::slice(&tensor.array, &starts, &stops, None)
-            .expect("Failed to slice");
+        let starts: Vec<i32> = slices
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let range = s.to_range(*shape.get(i).unwrap_or(&0));
+                range.start as i32
+            })
+            .collect();
+        let stops: Vec<i32> = slices
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let range = s.to_range(*shape.get(i).unwrap_or(&0));
+                range.end as i32
+            })
+            .collect();
+        let array =
+            mlx_rs::ops::slice(&tensor.array, &starts, &stops, None).expect("Failed to slice");
         MlxTensorPrimitive::new(array)
     }
 
@@ -86,21 +94,32 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
         value: MlxTensorPrimitive,
     ) -> MlxTensorPrimitive {
         let shape = tensor.shape().to_vec();
-        let starts: Vec<i32> = slices.iter().enumerate().map(|(i, s)| {
-            let range = s.to_range(*shape.get(i).unwrap_or(&0));
-            range.start as i32
-        }).collect();
-        let stops: Vec<i32> = slices.iter().enumerate().map(|(i, s)| {
-            let range = s.to_range(*shape.get(i).unwrap_or(&0));
-            range.end as i32
-        }).collect();
+        let starts: Vec<i32> = slices
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let range = s.to_range(*shape.get(i).unwrap_or(&0));
+                range.start as i32
+            })
+            .collect();
+        let stops: Vec<i32> = slices
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let range = s.to_range(*shape.get(i).unwrap_or(&0));
+                range.end as i32
+            })
+            .collect();
         let array = mlx_rs::ops::slice_update(&tensor.array, &value.array, &starts, &stops, None)
             .expect("Failed to slice_assign");
         MlxTensorPrimitive::new(array)
     }
 
     fn bool_into_int(tensor: MlxTensorPrimitive) -> MlxTensorPrimitive {
-        let array = tensor.array.as_type::<i32>().expect("Failed to cast to int");
+        let array = tensor
+            .array
+            .as_type::<i32>()
+            .expect("Failed to cast to int");
         MlxTensorPrimitive::new(array)
     }
 
@@ -115,7 +134,8 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
     }
 
     fn bool_and(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
-        let array = mlx_rs::ops::logical_and(&lhs.array, &rhs.array).expect("Failed to logical_and");
+        let array =
+            mlx_rs::ops::logical_and(&lhs.array, &rhs.array).expect("Failed to logical_and");
         MlxTensorPrimitive::new(array)
     }
 
@@ -134,14 +154,14 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
 
     fn bool_permute(tensor: MlxTensorPrimitive, axes: &[usize]) -> MlxTensorPrimitive {
         let axes_i32: Vec<i32> = axes.iter().map(|&a| a as i32).collect();
-        let array = mlx_rs::ops::transpose_axes(&tensor.array, &axes_i32).expect("Failed to permute");
+        let array =
+            mlx_rs::ops::transpose_axes(&tensor.array, &axes_i32).expect("Failed to permute");
         MlxTensorPrimitive::new(array)
     }
 
     fn bool_flip(tensor: MlxTensorPrimitive, axes: &[usize]) -> MlxTensorPrimitive {
         let axes_i32: Vec<i32> = axes.iter().map(|&a| a as i32).collect();
-        let array = mlx_rs::ops::flip(&tensor.array, &axes_i32[..])
-            .expect("Failed to flip");
+        let array = mlx_rs::ops::flip(&tensor.array, &axes_i32[..]).expect("Failed to flip");
         MlxTensorPrimitive::new(array)
     }
 
@@ -168,7 +188,8 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
     }
 
     fn bool_any_dim(tensor: MlxTensorPrimitive, dim: usize) -> MlxTensorPrimitive {
-        let array = mlx_rs::ops::any_axis(&tensor.array, dim as i32, true).expect("Failed to any_dim");
+        let array =
+            mlx_rs::ops::any_axis(&tensor.array, dim as i32, true).expect("Failed to any_dim");
         MlxTensorPrimitive::new(array)
     }
 
@@ -178,7 +199,8 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
     }
 
     fn bool_all_dim(tensor: MlxTensorPrimitive, dim: usize) -> MlxTensorPrimitive {
-        let array = mlx_rs::ops::all_axis(&tensor.array, dim as i32, true).expect("Failed to all_dim");
+        let array =
+            mlx_rs::ops::all_axis(&tensor.array, dim as i32, true).expect("Failed to all_dim");
         MlxTensorPrimitive::new(array)
     }
 
@@ -210,8 +232,8 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
         tensor: MlxTensorPrimitive,
         indices: MlxTensorPrimitive,
     ) -> MlxTensorPrimitive {
-        let array = take_along_axis(&tensor.array, &indices.array, dim as i32)
-            .expect("Failed to gather");
+        let array =
+            take_along_axis(&tensor.array, &indices.array, dim as i32).expect("Failed to gather");
         MlxTensorPrimitive::new(array)
     }
 
@@ -221,7 +243,9 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
         indices: MlxTensorPrimitive,
         value: MlxTensorPrimitive,
     ) -> MlxTensorPrimitive {
-        let array = tensor.array.put_along_axis(&indices.array, &value.array, dim as i32)
+        let array = tensor
+            .array
+            .put_along_axis(&indices.array, &value.array, dim as i32)
             .expect("Failed to scatter_or");
         MlxTensorPrimitive::new(array)
     }
@@ -233,7 +257,8 @@ impl<F: FloatMlxElement> BoolTensorOps<Self> for Mlx<F> {
     }
 
     fn bool_repeat_dim(tensor: MlxTensorPrimitive, dim: usize, times: usize) -> MlxTensorPrimitive {
-        let array = mlx_rs::ops::repeat_axis::<bool>(tensor.array, dim as i32, times as i32).expect("Failed to repeat");
+        let array = mlx_rs::ops::repeat_axis::<bool>(tensor.array, dim as i32, times as i32)
+            .expect("Failed to repeat");
         MlxTensorPrimitive::new(array)
     }
 
