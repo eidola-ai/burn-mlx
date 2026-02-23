@@ -45,17 +45,23 @@
 //! // Now you can use automatic differentiation with MLX
 //! ```
 
+mod backend;
 mod device;
 mod element;
-mod tensor;
-mod backend;
 mod ops;
+mod tensor;
 
 // Public exports
-pub use backend::{Mlx, MlxTensorPrimitive, MlxQuantizedTensorPrimitive};
+pub use backend::{Mlx, MlxQuantizedTensorPrimitive, MlxTensorPrimitive};
 pub use device::MlxDevice;
-pub use element::MlxElement;
+pub use element::{FloatMlxElement, MlxElement};
 pub use tensor::MlxTensor;
+
+/// Half-precision (f16) MLX backend for faster inference on Apple Silicon.
+pub type MlxHalf = Mlx<half::f16>;
+
+/// BFloat16 MLX backend.
+pub type MlxBf16 = Mlx<half::bf16>;
 
 /// Re-export mlx-rs types for advanced usage.
 pub mod mlx {
@@ -65,7 +71,7 @@ pub mod mlx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn_tensor::{backend::Backend, Tensor, TensorData, Shape};
+    use burn_tensor::{Shape, Tensor, TensorData};
 
     #[test]
     fn test_device_creation() {
@@ -157,18 +163,17 @@ mod tests {
 
         // Create a 4D tensor: [N, C, H, W] = [1, 1, 4, 4]
         let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-        let x: Tensor<Mlx, 4> = Tensor::from_data(
-            TensorData::new(data, Shape::new([1, 1, 4, 4])),
-            &device
-        );
+        let x: Tensor<Mlx, 4> =
+            Tensor::from_data(TensorData::new(data, Shape::new([1, 1, 4, 4])), &device);
 
         // Apply avg_pool2d with kernel_size=2, stride=2
-        let pooled = Mlx::avg_pool2d(
+        let pooled = Mlx::<f32>::avg_pool2d(
             x.into_primitive().tensor(),
             [2, 2],
             [2, 2],
             [0, 0],
             true,
+            false,
         );
 
         let shape = pooled.shape();
@@ -183,18 +188,17 @@ mod tests {
 
         // Create a 4D tensor: [N, C, H, W] = [1, 1, 4, 4]
         let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-        let x: Tensor<Mlx, 4> = Tensor::from_data(
-            TensorData::new(data, Shape::new([1, 1, 4, 4])),
-            &device
-        );
+        let x: Tensor<Mlx, 4> =
+            Tensor::from_data(TensorData::new(data, Shape::new([1, 1, 4, 4])), &device);
 
         // Apply max_pool2d with kernel_size=2, stride=2
-        let pooled = Mlx::max_pool2d(
+        let pooled = Mlx::<f32>::max_pool2d(
             x.into_primitive().tensor(),
             [2, 2],
             [2, 2],
             [0, 0],
             [1, 1],
+            false,
         );
 
         let shape = pooled.shape();
@@ -209,18 +213,17 @@ mod tests {
 
         // Create a 4D tensor: [N, C, H, W] = [1, 1, 4, 4]
         let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-        let x: Tensor<Mlx, 4> = Tensor::from_data(
-            TensorData::new(data, Shape::new([1, 1, 4, 4])),
-            &device
-        );
+        let x: Tensor<Mlx, 4> =
+            Tensor::from_data(TensorData::new(data, Shape::new([1, 1, 4, 4])), &device);
 
         // Apply max_pool2d_with_indices with kernel_size=2, stride=2
-        let result = Mlx::max_pool2d_with_indices(
+        let result = Mlx::<f32>::max_pool2d_with_indices(
             x.into_primitive().tensor(),
             [2, 2],
             [2, 2],
             [0, 0],
             [1, 1],
+            false,
         );
 
         let output_shape = result.output.shape();
@@ -238,19 +241,11 @@ mod tests {
 
         // Create a 3D tensor: [N, C, L] = [1, 2, 8]
         let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-        let x: Tensor<Mlx, 3> = Tensor::from_data(
-            TensorData::new(data, Shape::new([1, 2, 8])),
-            &device
-        );
+        let x: Tensor<Mlx, 3> =
+            Tensor::from_data(TensorData::new(data, Shape::new([1, 2, 8])), &device);
 
         // Apply avg_pool1d with kernel_size=2, stride=2
-        let pooled = Mlx::avg_pool1d(
-            x.into_primitive().tensor(),
-            2,
-            2,
-            0,
-            true,
-        );
+        let pooled = Mlx::<f32>::avg_pool1d(x.into_primitive().tensor(), 2, 2, 0, true, false);
 
         let shape = pooled.shape();
         assert_eq!(shape, vec![1, 2, 4]);
@@ -264,19 +259,11 @@ mod tests {
 
         // Create a 3D tensor: [N, C, L] = [1, 2, 8]
         let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-        let x: Tensor<Mlx, 3> = Tensor::from_data(
-            TensorData::new(data, Shape::new([1, 2, 8])),
-            &device
-        );
+        let x: Tensor<Mlx, 3> =
+            Tensor::from_data(TensorData::new(data, Shape::new([1, 2, 8])), &device);
 
         // Apply max_pool1d with kernel_size=2, stride=2
-        let pooled = Mlx::max_pool1d(
-            x.into_primitive().tensor(),
-            2,
-            2,
-            0,
-            1,
-        );
+        let pooled = Mlx::<f32>::max_pool1d(x.into_primitive().tensor(), 2, 2, 0, 1, false);
 
         let shape = pooled.shape();
         assert_eq!(shape, vec![1, 2, 4]);
