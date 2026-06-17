@@ -1,6 +1,6 @@
 //! MLX Backend implementation for Burn.
 
-use burn_tensor::backend::{Backend, ExecutionError};
+use burn_tensor::backend::{Backend, BackendTypes, DTypeUsage, DTypeUsageSet, ExecutionError};
 use burn_tensor::quantization::QuantScheme;
 use burn_tensor::{DType, TensorMetadata};
 use mlx_rs::Array;
@@ -55,13 +55,13 @@ impl TensorMetadata for MlxTensorPrimitive {
             mlx_rs::Dtype::Float64 => DType::F64,
             mlx_rs::Dtype::Int32 => DType::I32,
             mlx_rs::Dtype::Int64 => DType::I64,
-            mlx_rs::Dtype::Bool => DType::Bool,
+            mlx_rs::Dtype::Bool => DType::Bool(burn_tensor::BoolStore::Native),
             _ => DType::F32, // Default fallback
         }
     }
 
     fn shape(&self) -> burn_tensor::Shape {
-        burn_tensor::Shape::from(self.shape.clone())
+        burn_tensor::Shape::from_iter(self.shape.iter().copied())
     }
 }
 
@@ -94,7 +94,7 @@ impl TensorMetadata for MlxQuantizedTensorPrimitive {
     }
 
     fn shape(&self) -> burn_tensor::Shape {
-        burn_tensor::Shape::from(self.shape.clone())
+        burn_tensor::Shape::from_iter(self.shape.iter().copied())
     }
 }
 
@@ -147,7 +147,7 @@ impl<F: FloatMlxElement> Clone for Mlx<F> {
 
 impl<F: FloatMlxElement> Copy for Mlx<F> {}
 
-impl<F: FloatMlxElement> Backend for Mlx<F> {
+impl<F: FloatMlxElement> BackendTypes for Mlx<F> {
     type Device = MlxDevice;
 
     type FloatTensorPrimitive = MlxTensorPrimitive;
@@ -160,7 +160,9 @@ impl<F: FloatMlxElement> Backend for Mlx<F> {
     type BoolElem = bool;
 
     type QuantizedTensorPrimitive = MlxQuantizedTensorPrimitive;
+}
 
+impl<F: FloatMlxElement> Backend for Mlx<F> {
     fn name(_device: &Self::Device) -> String {
         "mlx".to_string()
     }
@@ -171,17 +173,22 @@ impl<F: FloatMlxElement> Backend for Mlx<F> {
         let _ = mlx_rs::random::seed(seed);
     }
 
-    fn supports_dtype(_device: &Self::Device, dtype: DType) -> bool {
-        matches!(
-            dtype,
-            DType::F32
-                | DType::F64
-                | DType::F16
-                | DType::BF16
-                | DType::I32
-                | DType::I64
-                | DType::Bool
-        )
+    fn dtype_usage(_device: &Self::Device, dtype: DType) -> DTypeUsageSet {
+        match dtype {
+            // Float types support the full op suite plus accelerated GEMM paths.
+            DType::F32 | DType::F16 | DType::BF16 | DType::F64 => {
+                DTypeUsage::general() | DTypeUsage::Accelerated
+            }
+            // Int and bool types are fully usable for general ops but not accelerated.
+            DType::I32 | DType::I64 | DType::Bool(_) => DTypeUsage::general(),
+            // Anything else (smaller ints, quantized, etc.) is unsupported.
+            _ => DTypeUsageSet::empty(),
+        }
+    }
+
+    fn device_count(_type_id: u16) -> usize {
+        // MLX exposes a single unified-memory GPU/CPU device.
+        1
     }
 
     fn sync(_device: &Self::Device) -> Result<(), ExecutionError> {

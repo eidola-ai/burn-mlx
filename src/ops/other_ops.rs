@@ -4,7 +4,7 @@ use burn_tensor::{
     backend::ExecutionError,
     ops::{ActivationOps, FloatTensorOps, QTensorOps, TransactionOps},
     quantization::{QuantLevel, QuantScheme, QuantValue, QuantizedBytes},
-    DType, Shape, Slice, TensorData, TensorPrimitive,
+    DType, FloatDType, Scalar, Shape, Slice, TensorData, TensorPrimitive,
 };
 use mlx_rs::Array;
 
@@ -35,15 +35,19 @@ impl<F: FloatMlxElement> ActivationOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn leaky_relu(tensor: MlxTensorPrimitive, negative_slope: F) -> MlxTensorPrimitive {
-        let slope_f32 = num_traits::ToPrimitive::to_f32(&negative_slope).unwrap();
+    fn leaky_relu(tensor: MlxTensorPrimitive, negative_slope: Scalar) -> MlxTensorPrimitive {
+        let slope_f32 = negative_slope.elem::<f32>();
         let array = mlx_rs::nn::leaky_relu(&tensor.array, slope_f32).expect("leaky_relu");
         MlxTensorPrimitive::new(array)
     }
 
-    fn hard_sigmoid(tensor: MlxTensorPrimitive, alpha: F, beta: F) -> MlxTensorPrimitive {
-        let alpha_arr = F::scalar_array(alpha);
-        let beta_arr = F::scalar_array(beta);
+    fn hard_sigmoid(
+        tensor: MlxTensorPrimitive,
+        alpha: Scalar,
+        beta: Scalar,
+    ) -> MlxTensorPrimitive {
+        let alpha_arr = F::scalar_array(alpha.elem::<F>());
+        let beta_arr = F::scalar_array(beta.elem::<F>());
         let scaled = mlx_rs::ops::multiply(&tensor.array, &alpha_arr).expect("multiply");
         let shifted = mlx_rs::ops::add(&scaled, &beta_arr).expect("add");
         let zero = F::f64_scalar_array(0.0);
@@ -136,7 +140,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
             quantized,
             scales: mlx_scales,
             biases: mlx_biases,
-            shape: data.shape,
+            shape: data.shape.to_vec(),
             group_size,
             bits,
             scheme,
@@ -166,7 +170,10 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         }
     }
 
-    fn dequantize(tensor: MlxQuantizedTensorPrimitive) -> MlxTensorPrimitive {
+    fn dequantize(
+        tensor: MlxQuantizedTensorPrimitive,
+        _dtype: FloatDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::dequantize(
             &tensor.quantized,
             &tensor.scales,
@@ -200,13 +207,13 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
             }
             // quantized x float — dequantize LHS
             (TensorPrimitive::QFloat(lhs_q), TensorPrimitive::Float(rhs_f)) => {
-                let lhs_f = Self::dequantize(lhs_q);
+                let lhs_f = Self::dequantize(lhs_q, FloatDType::F32);
                 TensorPrimitive::Float(<Self as FloatTensorOps<Self>>::float_matmul(lhs_f, rhs_f))
             }
             // both quantized — dequantize both
             (TensorPrimitive::QFloat(lhs_q), TensorPrimitive::QFloat(rhs_q)) => {
-                let lhs_f = Self::dequantize(lhs_q);
-                let rhs_f = Self::dequantize(rhs_q);
+                let lhs_f = Self::dequantize(lhs_q, FloatDType::F32);
+                let rhs_f = Self::dequantize(rhs_q, FloatDType::F32);
                 TensorPrimitive::Float(<Self as FloatTensorOps<Self>>::float_matmul(lhs_f, rhs_f))
             }
             // both float — standard matmul
@@ -228,7 +235,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
     }
 
     fn q_reshape(tensor: MlxQuantizedTensorPrimitive, shape: Shape) -> MlxQuantizedTensorPrimitive {
-        let new_dims: Vec<usize> = shape.dims.to_vec();
+        let new_dims: Vec<usize> = shape.to_vec();
 
         // Fast path: if the last 2 dimensions are unchanged, just update the
         // logical shape. The underlying quantized/scales/biases arrays remain
@@ -249,7 +256,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
 
         // Fallback: actual data reshape requires dequant → reshape → requant
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let reshaped = <Self as FloatTensorOps<Self>>::float_reshape(float_tensor, shape);
         Self::quantize_dynamic(reshaped, &scheme)
     }
@@ -257,7 +264,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
     async fn q_into_data(
         tensor: MlxQuantizedTensorPrimitive,
     ) -> Result<TensorData, ExecutionError> {
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         <Self as FloatTensorOps<Self>>::float_into_data(float_tensor).await
     }
 
@@ -281,7 +288,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         }
 
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let swapped = <Self as FloatTensorOps<Self>>::float_swap_dims(float_tensor, dim1, dim2);
         Self::quantize_dynamic(swapped, &scheme)
     }
@@ -291,14 +298,14 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         axes: &[usize],
     ) -> MlxQuantizedTensorPrimitive {
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let permuted = <Self as FloatTensorOps<Self>>::float_permute(float_tensor, axes);
         Self::quantize_dynamic(permuted, &scheme)
     }
 
     fn q_flip(tensor: MlxQuantizedTensorPrimitive, axes: &[usize]) -> MlxQuantizedTensorPrimitive {
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let flipped = <Self as FloatTensorOps<Self>>::float_flip(float_tensor, axes);
         Self::quantize_dynamic(flipped, &scheme)
     }
@@ -309,7 +316,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         indices: MlxTensorPrimitive,
     ) -> MlxQuantizedTensorPrimitive {
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let selected = <Self as FloatTensorOps<Self>>::float_select(float_tensor, dim, indices);
         Self::quantize_dynamic(selected, &scheme)
     }
@@ -319,13 +326,13 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         slices: &[Slice],
     ) -> MlxQuantizedTensorPrimitive {
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let sliced = <Self as FloatTensorOps<Self>>::float_slice(float_tensor, slices);
         Self::quantize_dynamic(sliced, &scheme)
     }
 
     fn q_expand(tensor: MlxQuantizedTensorPrimitive, shape: Shape) -> MlxQuantizedTensorPrimitive {
-        let new_dims: Vec<usize> = shape.dims.to_vec();
+        let new_dims: Vec<usize> = shape.to_vec();
         let old = &tensor.shape;
 
         // Fast path: if the last 2 dimensions are unchanged and any new prefix
@@ -347,7 +354,7 @@ impl<F: FloatMlxElement> QTensorOps<Self> for Mlx<F> {
         }
 
         let scheme = tensor.scheme;
-        let float_tensor = Self::dequantize(tensor);
+        let float_tensor = Self::dequantize(tensor, FloatDType::F32);
         let expanded = <Self as FloatTensorOps<Self>>::float_expand(float_tensor, shape);
         Self::quantize_dynamic(expanded, &scheme)
     }

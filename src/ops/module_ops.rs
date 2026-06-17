@@ -1,8 +1,9 @@
 //! Module operations for MLX backend (neural network primitives).
 
 use burn_tensor::ops::{
-    ConvOptions, ConvTransposeOptions, DeformConv2dBackward, DeformConvOptions, InterpolateOptions,
-    MaxPool1dWithIndices, MaxPool2dBackward, MaxPool2dWithIndices, ModuleOps,
+    AttentionModuleOptions, ConvOptions, ConvTransposeOptions, DeformConv2dBackward,
+    DeformConvOptions, InterpolateOptions, MaxPool1dWithIndices, MaxPool2dBackward,
+    MaxPool2dWithIndices, ModuleOps,
 };
 use mlx_rs::ops::indexing::take_axis;
 use mlx_rs::Array;
@@ -802,5 +803,163 @@ impl<F: FloatMlxElement> ModuleOps<Self> for Mlx<F> {
         _indices: MlxTensorPrimitive,
     ) -> MlxTensorPrimitive {
         weights
+    }
+
+    fn attention(
+        query: MlxTensorPrimitive,
+        key: MlxTensorPrimitive,
+        value: MlxTensorPrimitive,
+        mask: Option<MlxTensorPrimitive>,
+        attn_bias: Option<MlxTensorPrimitive>,
+        options: AttentionModuleOptions,
+    ) -> MlxTensorPrimitive {
+        // head_dim is the last dim of the query tensor.
+        let q_shape = query.shape();
+        let head_dim = q_shape[q_shape.len() - 1];
+        let scale = options
+            .scale
+            .unwrap_or_else(|| 1.0 / (head_dim as f64).sqrt()) as f32;
+
+        // Native MLX SDPA does not support softcap. Fall back to a manual
+        // implementation whenever softcap is requested, or when both causal
+        // masking and an explicit mask/bias are combined (which the single
+        // MLX mask argument cannot express directly).
+        let needs_manual = options.softcap.is_some()
+            || (options.is_causal && (mask.is_some() || attn_bias.is_some()));
+
+        if !needs_manual {
+            // Build the optional additive float mask from the bool mask and/or bias.
+            // The MLX SDPA mask is additive: 0 where attended, -inf where masked.
+            let additive: Option<Array> = match (&mask, &attn_bias) {
+                (None, None) => None,
+                (Some(m), None) => {
+                    // bool mask: true => masked (-inf). Build (mask ? -inf : 0).
+                    let neg_inf = F::scalar_array(F::neg_infinity());
+                    let zero = F::f64_scalar_array(0.0);
+                    let neg_inf_b = mlx_rs::ops::broadcast_to(&neg_inf, m.array.shape())
+                        .expect("broadcast");
+                    let zero_b =
+                        mlx_rs::ops::broadcast_to(&zero, m.array.shape()).expect("broadcast");
+                    Some(
+                        mlx_rs::ops::r#where(&m.array, &neg_inf_b, &zero_b)
+                            .expect("where mask"),
+                    )
+                }
+                (None, Some(b)) => Some(b.array.clone()),
+                (Some(m), Some(b)) => {
+                    let neg_inf = F::scalar_array(F::neg_infinity());
+                    let zero = F::f64_scalar_array(0.0);
+                    let neg_inf_b = mlx_rs::ops::broadcast_to(&neg_inf, m.array.shape())
+                        .expect("broadcast");
+                    let zero_b =
+                        mlx_rs::ops::broadcast_to(&zero, m.array.shape()).expect("broadcast");
+                    let mask_add = mlx_rs::ops::r#where(&m.array, &neg_inf_b, &zero_b)
+                        .expect("where mask");
+                    Some(mlx_rs::ops::add(&mask_add, &b.array).expect("add bias"))
+                }
+            };
+
+            let result = if options.is_causal {
+                mlx_rs::fast::scaled_dot_product_attention(
+                    &query.array,
+                    &key.array,
+                    &value.array,
+                    scale,
+                    mlx_rs::fast::ScaledDotProductAttentionMask::Causal,
+                )
+                .expect("SDPA causal")
+            } else if let Some(m) = &additive {
+                mlx_rs::fast::scaled_dot_product_attention(
+                    &query.array,
+                    &key.array,
+                    &value.array,
+                    scale,
+                    m,
+                )
+                .expect("SDPA masked")
+            } else {
+                mlx_rs::fast::scaled_dot_product_attention(
+                    &query.array,
+                    &key.array,
+                    &value.array,
+                    scale,
+                    None,
+                )
+                .expect("SDPA")
+            };
+            return MlxTensorPrimitive::new(result);
+        }
+
+        // Manual fallback: scores = (Q @ Kᵀ) * scale [+ bias] [+ causal/mask -inf],
+        // optional softcap, softmax over last dim, then @ V.
+        let rank = q_shape.len();
+        let k_t = mlx_rs::ops::swap_axes(&key.array, (rank - 1) as i32, (rank - 2) as i32)
+            .expect("transpose key");
+        let mut scores = query.array.matmul(&k_t).expect("QK^T");
+        let scale_arr = F::f64_scalar_array(scale as f64);
+        scores = mlx_rs::ops::multiply(&scores, &scale_arr).expect("scale");
+
+        if let Some(softcap) = options.softcap {
+            let cap = F::f64_scalar_array(softcap);
+            let divided = mlx_rs::ops::divide(&scores, &cap).expect("softcap div");
+            let tanh = mlx_rs::ops::tanh(&divided).expect("softcap tanh");
+            scores = mlx_rs::ops::multiply(&tanh, &cap).expect("softcap mul");
+        }
+
+        if let Some(b) = &attn_bias {
+            scores = mlx_rs::ops::add(&scores, &b.array).expect("add bias");
+        }
+
+        if let Some(m) = &mask {
+            // true => masked: set to -inf.
+            let neg_inf = F::scalar_array(F::neg_infinity());
+            let neg_inf_b =
+                mlx_rs::ops::broadcast_to(&neg_inf, scores.shape()).expect("broadcast");
+            scores = mlx_rs::ops::r#where(&m.array, &neg_inf_b, &scores).expect("apply mask");
+        }
+
+        if options.is_causal {
+            // Build a lower-triangular causal mask over the last two dims and
+            // set the upper triangle to -inf.
+            let seq_q = scores.shape()[rank - 2] as usize;
+            let seq_k = scores.shape()[rank - 1] as usize;
+            let mut tri: Vec<bool> = Vec::with_capacity(seq_q * seq_k);
+            for i in 0..seq_q {
+                for j in 0..seq_k {
+                    // mask out (true) positions strictly in the future.
+                    tri.push(j > i);
+                }
+            }
+            let tri_arr =
+                Array::from_slice(&tri, &[seq_q as i32, seq_k as i32]);
+            let neg_inf = F::scalar_array(F::neg_infinity());
+            let neg_inf_b =
+                mlx_rs::ops::broadcast_to(&neg_inf, scores.shape()).expect("broadcast");
+            let tri_b = mlx_rs::ops::broadcast_to(&tri_arr, scores.shape()).expect("broadcast");
+            scores =
+                mlx_rs::ops::r#where(&tri_b, &neg_inf_b, &scores).expect("apply causal");
+        }
+
+        let weights = mlx_rs::ops::softmax_axis(&scores, (rank - 1) as i32, None)
+            .expect("softmax");
+        let out = weights.matmul(&value.array).expect("attn @ V");
+        MlxTensorPrimitive::new(out)
+    }
+
+    fn rfft(
+        _signal: MlxTensorPrimitive,
+        _dim: usize,
+        _n: Option<usize>,
+    ) -> (MlxTensorPrimitive, MlxTensorPrimitive) {
+        unimplemented!("rfft not supported by the MLX backend")
+    }
+
+    fn irfft(
+        _spectrum_re: MlxTensorPrimitive,
+        _spectrum_im: MlxTensorPrimitive,
+        _dim: usize,
+        _n: Option<usize>,
+    ) -> MlxTensorPrimitive {
+        unimplemented!("irfft not supported by the MLX backend")
     }
 }

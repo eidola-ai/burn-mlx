@@ -46,10 +46,6 @@ impl burn_tensor::backend::Device for MlxDevice {
             MlxDevice::Gpu => burn_tensor::backend::DeviceId::new(1, 0),
         }
     }
-
-    fn device_count(_type_id: u16) -> usize {
-        1
-    }
 }
 
 impl DeviceOps for MlxDevice {}

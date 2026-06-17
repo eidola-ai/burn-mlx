@@ -127,7 +127,7 @@ impl MlxElement for bool {
         Dtype::Bool
     }
     fn dtype() -> DType {
-        DType::Bool
+        DType::Bool(burn_tensor::BoolStore::Native)
     }
 }
 

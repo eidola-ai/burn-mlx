@@ -1,7 +1,8 @@
 //! Integer tensor operations for MLX backend.
 
 use burn_tensor::{
-    backend::ExecutionError, ops::IntTensorOps, Distribution, IntDType, Shape, Slice, TensorData,
+    backend::ExecutionError, ops::IntTensorOps, BoolDType, Distribution, FloatDType, IntDType,
+    Scalar, Shape, Slice, TensorData,
 };
 use mlx_rs::ops::indexing::{argmax_axis, argmin_axis, take_along_axis, take_axis};
 use mlx_rs::Array;
@@ -41,7 +42,7 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     fn int_empty(shape: Shape, device: &MlxDevice, _dtype: IntDType) -> MlxTensorPrimitive {
         let mlx_device = device.to_mlx_device();
         mlx_rs::Device::set_default(&mlx_device);
-        let shape_i32: Vec<i32> = shape.dims.iter().map(|&s| s as i32).collect();
+        let shape_i32: Vec<i32> = shape.iter().map(|&s| s as i32).collect();
         let array = Array::zeros::<i32>(&shape_i32).expect("Failed to create empty int array");
         MlxTensorPrimitive::new(array)
     }
@@ -53,7 +54,7 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     fn int_ones(shape: Shape, device: &MlxDevice, _dtype: IntDType) -> MlxTensorPrimitive {
         let mlx_device = device.to_mlx_device();
         mlx_rs::Device::set_default(&mlx_device);
-        let shape_i32: Vec<i32> = shape.dims.iter().map(|&s| s as i32).collect();
+        let shape_i32: Vec<i32> = shape.iter().map(|&s| s as i32).collect();
         let array = Array::ones::<i32>(&shape_i32).expect("Failed to create ones int array");
         MlxTensorPrimitive::new(array)
     }
@@ -62,10 +63,11 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         shape: Shape,
         distribution: Distribution,
         device: &MlxDevice,
+        _dtype: IntDType,
     ) -> MlxTensorPrimitive {
         let mlx_device = device.to_mlx_device();
         mlx_rs::Device::set_default(&mlx_device);
-        let shape_i32: Vec<i32> = shape.dims.iter().map(|&s| s as i32).collect();
+        let shape_i32: Vec<i32> = shape.iter().map(|&s| s as i32).collect();
 
         let array = match distribution {
             Distribution::Uniform(low, high) => {
@@ -83,8 +85,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_add_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_add_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::add(&lhs.array, &scalar).expect("Failed to add scalar");
         MlxTensorPrimitive::new(array)
     }
@@ -94,8 +96,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_sub_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_sub_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::subtract(&lhs.array, &scalar).expect("Failed to subtract scalar");
         MlxTensorPrimitive::new(array)
     }
@@ -105,8 +107,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_mul_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_mul_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::multiply(&lhs.array, &scalar).expect("Failed to multiply scalar");
         MlxTensorPrimitive::new(array)
     }
@@ -116,8 +118,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_div_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_div_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::divide(&lhs.array, &scalar).expect("Failed to divide scalar");
         MlxTensorPrimitive::new(array)
     }
@@ -127,8 +129,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_remainder_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_remainder_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array =
             mlx_rs::ops::remainder(&lhs.array, &scalar).expect("Failed to remainder scalar");
         MlxTensorPrimitive::new(array)
@@ -166,7 +168,7 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     }
 
     fn int_reshape(tensor: MlxTensorPrimitive, shape: Shape) -> MlxTensorPrimitive {
-        let shape_i32: Vec<i32> = shape.dims.iter().map(|&s| s as i32).collect();
+        let shape_i32: Vec<i32> = shape.iter().map(|&s| s as i32).collect();
         let array = tensor.array.reshape(&shape_i32).expect("Failed to reshape");
         MlxTensorPrimitive::new(array)
     }
@@ -234,9 +236,9 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     fn int_mask_fill(
         tensor: MlxTensorPrimitive,
         mask: MlxTensorPrimitive,
-        value: i32,
+        value: Scalar,
     ) -> MlxTensorPrimitive {
-        let fill_val = Array::from_int(value);
+        let fill_val = Array::from_int(value.elem::<i32>());
         let fill_broadcast = mlx_rs::ops::broadcast_to(&fill_val, tensor.array.shape())
             .expect("Failed to broadcast");
         let array = mlx_rs::ops::r#where(&mask.array, &fill_broadcast, &tensor.array)
@@ -289,57 +291,97 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_equal(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_equal(
+        lhs: MlxTensorPrimitive,
+        rhs: MlxTensorPrimitive,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::eq(&lhs.array, &rhs.array).expect("Failed to equal");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_equal_elem(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_equal_elem(
+        lhs: MlxTensorPrimitive,
+        rhs: Scalar,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::eq(&lhs.array, &scalar).expect("Failed to equal_elem");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_greater(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_greater(
+        lhs: MlxTensorPrimitive,
+        rhs: MlxTensorPrimitive,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::gt(&lhs.array, &rhs.array).expect("Failed to greater");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_greater_elem(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_greater_elem(
+        lhs: MlxTensorPrimitive,
+        rhs: Scalar,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::gt(&lhs.array, &scalar).expect("Failed to greater_elem");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_greater_equal(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_greater_equal(
+        lhs: MlxTensorPrimitive,
+        rhs: MlxTensorPrimitive,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::ge(&lhs.array, &rhs.array).expect("Failed to greater_equal");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_greater_equal_elem(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_greater_equal_elem(
+        lhs: MlxTensorPrimitive,
+        rhs: Scalar,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::ge(&lhs.array, &scalar).expect("Failed to greater_equal_elem");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_lower(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_lower(
+        lhs: MlxTensorPrimitive,
+        rhs: MlxTensorPrimitive,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::lt(&lhs.array, &rhs.array).expect("Failed to lower");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_lower_elem(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_lower_elem(
+        lhs: MlxTensorPrimitive,
+        rhs: Scalar,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::lt(&lhs.array, &scalar).expect("Failed to lower_elem");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_lower_equal(lhs: MlxTensorPrimitive, rhs: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_lower_equal(
+        lhs: MlxTensorPrimitive,
+        rhs: MlxTensorPrimitive,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::le(&lhs.array, &rhs.array).expect("Failed to lower_equal");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_lower_equal_elem(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
-        let scalar = Array::from_int(rhs);
+    fn int_lower_equal_elem(
+        lhs: MlxTensorPrimitive,
+        rhs: Scalar,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
+        let scalar = Array::from_int(rhs.elem::<i32>());
         let array = mlx_rs::ops::le(&lhs.array, &scalar).expect("Failed to lower_equal_elem");
         MlxTensorPrimitive::new(array)
     }
@@ -430,13 +472,13 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         )
     }
 
-    fn int_into_float(tensor: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_into_float(tensor: MlxTensorPrimitive, _out_dtype: FloatDType) -> MlxTensorPrimitive {
         let array = F::cast_array(&tensor.array);
         MlxTensorPrimitive::new(array)
     }
 
     fn int_expand(tensor: MlxTensorPrimitive, shape: Shape) -> MlxTensorPrimitive {
-        let shape_i32: Vec<i32> = shape.dims.iter().map(|&s| s as i32).collect();
+        let shape_i32: Vec<i32> = shape.iter().map(|&s| s as i32).collect();
         let array = mlx_rs::ops::broadcast_to(&tensor.array, &shape_i32).expect("Failed to expand");
         MlxTensorPrimitive::new(array)
     }
@@ -475,23 +517,50 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(indices)
     }
 
-    fn int_any(tensor: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_argtopk(tensor: MlxTensorPrimitive, dim: usize, k: usize) -> MlxTensorPrimitive {
+        // Indices of the top-k (largest) values along `dim`, ordered descending.
+        // MLX argsort is ascending; sort the negated array so the largest values
+        // come first, then slice the first k indices along `dim`.
+        let neg = mlx_rs::ops::negative(&tensor.array).expect("negate");
+        let order = mlx_rs::ops::argsort_axis(&neg, dim as i32).expect("argsort");
+        let rank = order.shape().len();
+        let starts = vec![0i32; rank];
+        let stops: Vec<i32> = order
+            .shape()
+            .iter()
+            .enumerate()
+            .map(|(i, &s)| if i == dim { k as i32 } else { s })
+            .collect();
+        let array =
+            mlx_rs::ops::slice(&order, &starts, &stops, None).expect("Failed to slice topk");
+        MlxTensorPrimitive::new(array)
+    }
+
+    fn int_any(tensor: MlxTensorPrimitive, _out_dtype: BoolDType) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::any(&tensor.array, false).expect("Failed to any");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_any_dim(tensor: MlxTensorPrimitive, dim: usize) -> MlxTensorPrimitive {
+    fn int_any_dim(
+        tensor: MlxTensorPrimitive,
+        dim: usize,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array =
             mlx_rs::ops::any_axis(&tensor.array, dim as i32, true).expect("Failed to any_dim");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_all(tensor: MlxTensorPrimitive) -> MlxTensorPrimitive {
+    fn int_all(tensor: MlxTensorPrimitive, _out_dtype: BoolDType) -> MlxTensorPrimitive {
         let array = mlx_rs::ops::all(&tensor.array, false).expect("Failed to all");
         MlxTensorPrimitive::new(array)
     }
 
-    fn int_all_dim(tensor: MlxTensorPrimitive, dim: usize) -> MlxTensorPrimitive {
+    fn int_all_dim(
+        tensor: MlxTensorPrimitive,
+        dim: usize,
+        _out_dtype: BoolDType,
+    ) -> MlxTensorPrimitive {
         let array =
             mlx_rs::ops::all_axis(&tensor.array, dim as i32, true).expect("Failed to all_dim");
         MlxTensorPrimitive::new(array)
@@ -585,7 +654,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(Array::from_slice(&result, &shape))
     }
 
-    fn bitwise_and_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
+    fn bitwise_and_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let rhs = rhs.elem::<i32>();
         lhs.array.eval().expect("eval");
         let lhs_data: Vec<i32> = lhs.array.as_slice().to_vec();
         let result: Vec<i32> = lhs_data.iter().map(|a| a & rhs).collect();
@@ -607,7 +677,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(Array::from_slice(&result, &shape))
     }
 
-    fn bitwise_or_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
+    fn bitwise_or_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let rhs = rhs.elem::<i32>();
         lhs.array.eval().expect("eval");
         let lhs_data: Vec<i32> = lhs.array.as_slice().to_vec();
         let result: Vec<i32> = lhs_data.iter().map(|a| a | rhs).collect();
@@ -629,7 +700,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(Array::from_slice(&result, &shape))
     }
 
-    fn bitwise_xor_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
+    fn bitwise_xor_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let rhs = rhs.elem::<i32>();
         lhs.array.eval().expect("eval");
         let lhs_data: Vec<i32> = lhs.array.as_slice().to_vec();
         let result: Vec<i32> = lhs_data.iter().map(|a| a ^ rhs).collect();
@@ -659,7 +731,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(Array::from_slice(&result, &shape))
     }
 
-    fn bitwise_left_shift_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
+    fn bitwise_left_shift_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let rhs = rhs.elem::<i32>();
         lhs.array.eval().expect("eval");
         let lhs_data: Vec<i32> = lhs.array.as_slice().to_vec();
         let result: Vec<i32> = lhs_data.iter().map(|a| a << rhs).collect();
@@ -681,7 +754,8 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(Array::from_slice(&result, &shape))
     }
 
-    fn bitwise_right_shift_scalar(lhs: MlxTensorPrimitive, rhs: i32) -> MlxTensorPrimitive {
+    fn bitwise_right_shift_scalar(lhs: MlxTensorPrimitive, rhs: Scalar) -> MlxTensorPrimitive {
+        let rhs = rhs.elem::<i32>();
         lhs.array.eval().expect("eval");
         let lhs_data: Vec<i32> = lhs.array.as_slice().to_vec();
         let result: Vec<i32> = lhs_data.iter().map(|a| a >> rhs).collect();
