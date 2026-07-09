@@ -209,6 +209,19 @@ impl<F: FloatMlxElement> FloatTensorOps<Self> for Mlx<F> {
         MlxTensorPrimitive::new(array)
     }
 
+    fn float_gather_nd(
+        data: MlxTensorPrimitive,
+        indices: MlxTensorPrimitive,
+    ) -> MlxTensorPrimitive {
+        let array = crate::ops::base::gather_nd_array(
+            &data.array,
+            &data.shape,
+            &indices.array,
+            &indices.shape,
+        );
+        MlxTensorPrimitive::new(array)
+    }
+
     fn float_scatter_add(
         dim: usize,
         tensor: MlxTensorPrimitive,

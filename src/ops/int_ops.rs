@@ -29,7 +29,22 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     async fn int_into_data(tensor: MlxTensorPrimitive) -> Result<TensorData, ExecutionError> {
         tensor.array.eval().expect("Failed to evaluate tensor");
         let shape = tensor.shape().to_vec();
-        let data: Vec<i32> = tensor.array.as_slice().to_vec();
+        // MLX index-producing ops (argmax/argmin/argsort) yield Uint32 arrays, and
+        // some int tensors may be Int64; the backend int element type is i32.
+        // Read according to the array's actual dtype and convert to i32.
+        let data: Vec<i32> = match tensor.array.dtype() {
+            mlx_rs::Dtype::Int32 => tensor.array.as_slice::<i32>().to_vec(),
+            mlx_rs::Dtype::Uint32 => {
+                tensor.array.as_slice::<u32>().iter().map(|&v| v as i32).collect()
+            }
+            mlx_rs::Dtype::Int64 => {
+                tensor.array.as_slice::<i64>().iter().map(|&v| v as i32).collect()
+            }
+            mlx_rs::Dtype::Uint8 => {
+                tensor.array.as_slice::<u8>().iter().map(|&v| v as i32).collect()
+            }
+            _ => tensor.array.as_type::<i32>().expect("cast to i32").as_slice::<i32>().to_vec(),
+        };
         Ok(TensorData::new(data, shape))
     }
 
@@ -256,6 +271,19 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
     ) -> MlxTensorPrimitive {
         let array =
             take_along_axis(&tensor.array, &indices.array, dim as i32).expect("Failed to gather");
+        MlxTensorPrimitive::new(array)
+    }
+
+    fn int_gather_nd(
+        data: MlxTensorPrimitive,
+        indices: MlxTensorPrimitive,
+    ) -> MlxTensorPrimitive {
+        let array = crate::ops::base::gather_nd_array(
+            &data.array,
+            &data.shape,
+            &indices.array,
+            &indices.shape,
+        );
         MlxTensorPrimitive::new(array)
     }
 
