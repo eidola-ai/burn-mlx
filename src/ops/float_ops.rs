@@ -18,7 +18,11 @@ impl<F: FloatMlxElement> FloatTensorOps<Self> for Mlx<F> {
         mlx_rs::Device::set_default(&mlx_device);
 
         let shape: Vec<i32> = data.shape.iter().map(|&s| s as i32).collect();
-        let values: Vec<F> = data.to_vec().expect("Failed to convert data to vec");
+        // Convert from whatever float dtype the data carries (e.g. F32 weights
+        // from an ONNX graph on an f16 backend) to the backend float element type.
+        // `iter` performs the element-wise dtype conversion; `to_vec` would require
+        // an exact dtype match.
+        let values: Vec<F> = data.iter::<F>().collect();
         let array = F::array_from_slice(&values, &shape);
 
         MlxTensorPrimitive::new(array)

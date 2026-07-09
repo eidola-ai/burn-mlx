@@ -17,7 +17,10 @@ impl<F: FloatMlxElement> IntTensorOps<Self> for Mlx<F> {
         mlx_rs::Device::set_default(&mlx_device);
 
         let shape: Vec<i32> = data.shape.iter().map(|&s| s as i32).collect();
-        let values: Vec<i32> = data.to_vec().expect("Failed to convert data to i32 vec");
+        // Convert from whatever integer dtype the data carries (e.g. I64 from an
+        // ONNX graph) down to the backend int element type (i32). `iter` performs
+        // the element-wise dtype conversion; `to_vec` would require an exact match.
+        let values: Vec<i32> = data.iter::<i32>().collect();
         let array = Array::from_slice(&values, &shape);
 
         MlxTensorPrimitive::new(array)
